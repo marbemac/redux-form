@@ -654,7 +654,7 @@ const describeReduxForm = (name, structure, combineReducers, expect) => {
       expect(formRender.calls.length).toBe(1)
 
       expect(inputRender).toHaveBeenCalled()
-      expect(inputRender.calls.length).toBe(1)      
+      expect(inputRender.calls.length).toBe(1)
 
       // Expect that input value has been initialized
       checkInputProps(inputRender.calls[ 0 ].arguments[ 0 ], 'bar')
@@ -699,6 +699,116 @@ const describeReduxForm = (name, structure, combineReducers, expect) => {
 
       expect(inputRender).toHaveBeenCalled()
       expect(inputRender.calls.length).toBe(3)
+
+      // Expect that input value has been re-initialized and is not dirty anymore
+      checkInputProps(inputRender.calls[ 2 ].arguments[ 0 ], 'baz')
+    })
+
+    it('should handle form and initialValues changing at the same time', () => {
+      const store = makeStore({})
+      const inputRender = createSpy(props => <input {...props.input}/>).andCallThrough()
+      const formRender = createSpy()
+
+      const initialValues = {
+        testForm1: {
+          deep: {
+            foo: 'bar'
+          }
+        },
+        testForm2: {
+          deep: {
+            foo: 'baz'
+          }
+        }
+      }
+
+      class Form extends Component {
+        render() {
+          formRender(this.props)
+          return (
+            <form>
+              <Field name="deep.foo" component={inputRender} type="text"/>
+            </form>
+          )
+        }
+      }
+      const Decorated = reduxForm({
+        enableReinitialize: true
+      })(Form)
+
+      class Container extends Component {
+        constructor(props) {
+          super(props)
+          this.state = { form: 'testForm1' }
+        }
+
+        render() {
+          return (
+            <div>
+              <Provider store={store}>
+                <Decorated form={this.state.form} initialValues={initialValues[this.state.form]} />
+              </Provider>
+              <button onClick={() => this.setState({ form: 'testForm2' })}>Change Form</button>
+            </div>
+          )
+        }
+      }
+
+      const dom = TestUtils.renderIntoDocument(<Container form="testForm1" />)
+
+      const checkInputProps = (props, value, pristine = true, dirty = false) => {
+        expect(props.meta.pristine).toBe(pristine)
+        expect(props.meta.dirty).toBe(dirty)
+        expect(props.input.value).toBe(value)
+      }
+
+      // Check initial state
+      expect(store.getState()).toEqualMap({
+        form: {
+          testForm1: {
+            registeredFields: [ { name: 'deep.foo', type: 'Field' } ],
+            initial: initialValues.testForm1,
+            values: initialValues.testForm1
+          }
+        }
+      })
+
+      // Expect renders due to initialization.
+      expect(formRender).toHaveBeenCalled()
+      expect(formRender.calls.length).toBe(1)
+
+      expect(inputRender).toHaveBeenCalled()
+      expect(inputRender.calls.length).toBe(1)
+
+      // Expect that input value has been initialized
+      checkInputProps(inputRender.calls[ 0 ].arguments[ 0 ], 'bar')
+
+      // Change form id and check if new initialValues are set
+      const initButton = TestUtils.findRenderedDOMComponentWithTag(dom, 'button')
+      TestUtils.Simulate.click(initButton)
+
+      // Check re-initialized state
+      expect(store.getState()).toEqualMap({
+        form: {
+          testForm1: {
+            registeredFields: [ { name: 'deep.foo', type: 'Field' } ],
+            initial: initialValues.testForm1,
+            values: initialValues.testForm1
+          },
+          testForm2: {
+            registeredFields: [ { name: 'deep.foo', type: 'Field' } ],
+            initial: initialValues.testForm2,
+            values: initialValues.testForm2
+          }
+        }
+      })
+
+      // Expect rerenders due to the re-initialization.
+      expect(formRender).toHaveBeenCalled()
+      expect(formRender.calls.length).toBe(2)
+
+      expect(inputRender).toHaveBeenCalled()
+      expect(inputRender.calls.length).toBe(2)
 
       // Expect that input value has been re-initialized and is not dirty anymore
       checkInputProps(inputRender.calls[ 2 ].arguments[ 0 ], 'baz')
@@ -972,16 +1082,16 @@ const describeReduxForm = (name, structure, combineReducers, expect) => {
       expect(propsOnLastRender(inputRender).meta.pristine).toBe(false, 'Input should not have been pristine')
       expect(propsOnLastRender(formRender).pristine).toBe(false, 'Form should not have been pristine')
 
-      store.dispatch(initialize('testForm', { 
+      store.dispatch(initialize('testForm', {
         deep: {
           foo: 'baz'
-        } 
+        }
       }))
 
       expect(propsOnLastRender(inputRender).input.value).toBe('baz')
       expect(propsOnLastRender(inputRender).meta.pristine).toBe(true, 'Input should have been pristine after initialize')
-      expect(propsOnLastRender(formRender).pristine).toBe(true, 'Form should have been pristine after initialize')      
-    }) 
+      expect(propsOnLastRender(formRender).pristine).toBe(true, 'Form should have been pristine after initialize')
+    })
 
     it('should make pristine any dirty field that has the new initial value, when keepDirtyOnReinitialize', () => {
       const store = makeStore({})
